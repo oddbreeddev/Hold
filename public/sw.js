@@ -3,6 +3,7 @@ const PRECACHE_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
+  '/logo.svg',
   'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;700&family=Unbounded:wght@400;900&display=swap',
   'https://cdn.tailwindcss.com'
 ];
