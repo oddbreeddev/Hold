@@ -1,0 +1,153 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>HOLD. // Minimalist Precision Game</title>
+    <meta name="description" content="HOLD. is a high-stakes minimalist precision game. Hold to grow the ring, release inside the safe zone to score. Master the rhythm and climb the leaderboard.">
+    <meta name="keywords" content="precision game, minimalist game, rhythm game, arcade game, web game, PWA game">
+    <meta name="author" content="HOLD. Team">
+    
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://hold-game.app/">
+    <meta property="og:title" content="HOLD. // Minimalist Precision Game">
+    <meta property="og:description" content="Master the art of precision. Hold to grow, release to score. How long can you survive?">
+    <meta property="og:image" content="https://picsum.photos/1200/630">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:title" content="HOLD. // Minimalist Precision Game">
+    <meta property="twitter:description" content="Master the art of precision. Hold to grow, release to score. How long can you survive?">
+    <meta property="twitter:image" content="https://picsum.photos/1200/630">
+
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#00f2ff">
+    <link rel="apple-touch-icon" href="https://picsum.photos/180/180">
+
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;700&family=Unbounded:wght@400;900&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').then(registration => {
+            console.log('SW registered: ', registration);
+          }).catch(registrationError => {
+            console.log('SW registration failed: ', registrationError);
+          });
+        });
+      }
+    </script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ['Space Grotesk', 'sans-serif'],
+              display: ['Unbounded', 'sans-serif'],
+            },
+            colors: {
+              bg: '#08080c',
+              accent: '#00f2ff',
+              danger: '#ff2d55',
+              success: '#00ffaa',
+              perfect: '#ffea00'
+            }
+          }
+        }
+      }
+    </script>
+    <style>
+      body {
+        background-color: #08080c;
+        color: #f8f8f2;
+        margin: 0;
+        overflow: hidden;
+        user-select: none;
+        touch-action: none;
+        -webkit-tap-highlight-color: transparent;
+      }
+      canvas {
+        touch-action: none;
+      }
+
+      @keyframes floatUp {
+        0% { transform: translateY(0) scale(0.8); opacity: 0; }
+        20% { transform: translateY(-20px) scale(1.1); opacity: 1; }
+        100% { transform: translateY(-100px) scale(1); opacity: 0; }
+      }
+
+      @keyframes scorePop {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.2); }
+        100% { transform: scale(1); }
+      }
+
+      @keyframes streakFlash {
+        0% { transform: scale(0.5); opacity: 0; filter: blur(10px); }
+        50% { transform: scale(1.2); opacity: 1; filter: blur(0px); }
+        100% { transform: scale(1); opacity: 0; filter: blur(5px); }
+      }
+
+      @keyframes pulseStreak {
+        0%, 100% { transform: scale(1); filter: brightness(1); }
+        50% { transform: scale(1.05); filter: brightness(1.2); }
+      }
+
+      @keyframes glitch {
+        0% { clip-path: inset(40% 0 61% 0); transform: translate(-20px, -10px); }
+        20% { clip-path: inset(92% 0 1% 0); transform: translate(20px, 10px); }
+        40% { clip-path: inset(43% 0 1% 0); transform: translate(-20px, -10px); }
+        60% { clip-path: inset(25% 0 58% 0); transform: translate(20px, 10px); }
+        80% { clip-path: inset(54% 0 7% 0); transform: translate(-20px, -10px); }
+        100% { clip-path: inset(58% 0 43% 0); transform: translate(20px, 10px); }
+      }
+
+      @keyframes heavyShake {
+        0%, 100% { transform: translate(0, 0); }
+        10%, 30%, 50%, 70%, 90% { transform: translate(-10px, -10px); }
+        20%, 40%, 60%, 80% { transform: translate(10px, 10px); }
+      }
+
+      .animate-float-up {
+        animation: floatUp 0.8s ease-out forwards;
+      }
+
+      .animate-score-pop {
+        animation: scorePop 0.2s ease-out;
+      }
+
+      .animate-streak {
+        animation: streakFlash 1s ease-in-out forwards;
+      }
+
+      .animate-pulse-streak {
+        animation: pulseStreak 0.8s ease-in-out infinite;
+      }
+
+      .animate-glitch {
+        animation: glitch 0.3s linear infinite;
+        text-shadow: 2px 0 #ff2d55, -2px 0 #00f2ff;
+      }
+
+      .animate-heavy-shake {
+        animation: heavyShake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+      }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body>
+    <div id="root"></div>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
