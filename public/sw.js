@@ -33,11 +33,12 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Skip cross-origin requests unless they are for fonts or tailwind
+  // Skip cross-origin requests unless they are for fonts, tailwind, or picsum
   if (!event.request.url.startsWith(self.location.origin) && 
       !event.request.url.includes('fonts.googleapis.com') && 
       !event.request.url.includes('fonts.gstatic.com') &&
-      !event.request.url.includes('cdn.tailwindcss.com')) {
+      !event.request.url.includes('cdn.tailwindcss.com') &&
+      !event.request.url.includes('picsum.photos')) {
     return;
   }
 
@@ -50,8 +51,10 @@ self.addEventListener('fetch', (event) => {
       return fetch(event.request).then((response) => {
         // Check if we received a valid response
         if (!response || response.status !== 200 || response.type !== 'basic') {
-          // For cross-origin assets like fonts/tailwind, type might be 'opaque'
-          if (event.request.url.includes('fonts') || event.request.url.includes('tailwind')) {
+          // For cross-origin assets like fonts/tailwind/picsum, type might be 'opaque'
+          if (event.request.url.includes('fonts') || 
+              event.request.url.includes('tailwind') ||
+              event.request.url.includes('picsum')) {
              // We still want to cache these
           } else {
             return response;
