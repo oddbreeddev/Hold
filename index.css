@@ -1,0 +1,18 @@
+/* Global styles for HOLD. */
+
+:root {
+  --bg: #08080c;
+  --accent: #00f2ff;
+  --success: #00ffaa;
+  --danger: #ff2d55;
+  --perfect: #ffea00;
+}
+
+body {
+  background-color: var(--bg);
+  color: #ffffff;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-family: 'Space Grotesk', sans-serif;
+}
