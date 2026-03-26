@@ -1,0 +1,85 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Stores user profile, wallet balance, and career statistics.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique Firebase Auth ID" },
+        "displayName": { "type": "string", "description": "Public name shown on leaderboards" },
+        "photoURL": { "type": "string", "description": "Avatar URL" },
+        "walletBalance": { "type": "number", "description": "Current withdrawable balance in USD" },
+        "totalEarnings": { "type": "number", "description": "Lifetime earnings from tournaments and duels" },
+        "bestScore": { "type": "number", "description": "All-time high score" },
+        "gamesPlayed": { "type": "integer", "description": "Total rounds played" },
+        "isVerified": { "type": "boolean", "description": "Whether the user has passed anti-cheat verification" }
+      },
+      "required": ["uid", "displayName", "walletBalance"]
+    },
+    "Tournament": {
+      "title": "Tournament",
+      "description": "A timed competitive event with a prize pool.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "startTime": { "type": "string", "format": "date-time" },
+        "endTime": { "type": "string", "format": "date-time" },
+        "prizePool": { "type": "number" },
+        "entryFee": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "ended", "calculating"] },
+        "winnerUids": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["id", "title", "startTime", "endTime", "prizePool"]
+    },
+    "Match": {
+      "title": "Game Match",
+      "description": "A single game session log for anti-cheat verification.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uid": { "type": "string" },
+        "score": { "type": "number" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "gameLog": { "type": "string", "description": "JSON string of hold/release events" },
+        "status": { "type": "string", "enum": ["pending", "verified", "flagged"] },
+        "tournamentId": { "type": "string", "description": "Optional tournament ID" }
+      },
+      "required": ["id", "uid", "score", "gameLog", "status"]
+    },
+    "Duel": {
+      "title": "1v1 Duel",
+      "description": "A direct challenge between two players.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "challengerUid": { "type": "string" },
+        "opponentUid": { "type": "string" },
+        "stake": { "type": "number" },
+        "challengerScore": { "type": "number" },
+        "opponentScore": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "accepted", "completed", "cancelled"] },
+        "winnerUid": { "type": "string" }
+      },
+      "required": ["id", "challengerUid", "opponentUid", "stake", "status"]
+    }
+  },
+  "firestore": {
+    "/users/{uid}": {
+      "schema": "User",
+      "description": "User profiles and wallet data."
+    },
+    "/tournaments/{tournamentId}": {
+      "schema": "Tournament",
+      "description": "Global tournament events."
+    },
+    "/matches/{matchId}": {
+      "schema": "Match",
+      "description": "Individual game logs for verification."
+    },
+    "/duels/{duelId}": {
+      "schema": "Duel",
+      "description": "1v1 match requests and results."
+    }
+  }
+}

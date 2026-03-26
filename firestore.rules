@@ -1,0 +1,161 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {uid}
+    // Fields:
+    //   - uid: string (required)
+    //   - displayName: string (required)
+    //   - photoURL: string (optional)
+    //   - walletBalance: number (required, immutable by user)
+    //   - totalEarnings: number (required, immutable by user)
+    //   - bestScore: number (required)
+    //   - gamesPlayed: number (required)
+    //   - isVerified: boolean (required, immutable by user)
+    //
+    // Collection: tournaments
+    // Document ID: {tournamentId}
+    // Fields:
+    //   - id: string (required)
+    //   - title: string (required)
+    //   - startTime: timestamp (required)
+    //   - endTime: timestamp (required)
+    //   - prizePool: number (required)
+    //   - entryFee: number (required)
+    //   - status: string (required, enum: active, ended, calculating)
+    //   - winnerUids: list (optional)
+    //
+    // Collection: matches
+    // Document ID: {matchId}
+    // Fields:
+    //   - id: string (required)
+    //   - uid: string (required, immutable)
+    //   - score: number (required, immutable)
+    //   - timestamp: timestamp (required, immutable)
+    //   - gameLog: string (required, immutable)
+    //   - status: string (required, enum: pending, verified, flagged)
+    //   - tournamentId: string (optional, immutable)
+    //
+    // Collection: duels
+    // Document ID: {duelId}
+    // Fields:
+    //   - id: string (required)
+    //   - challengerUid: string (required)
+    //   - opponentUid: string (required)
+    //   - stake: number (required)
+    //   - challengerScore: number (optional)
+    //   - opponentScore: number (optional)
+    //   - status: string (required, enum: pending, accepted, completed, cancelled)
+    //   - winnerUid: string (optional)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "aminudanielkaltungo@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasRequiredFields(['uid', 'displayName', 'walletBalance', 'totalEarnings', 'bestScore', 'gamesPlayed', 'isVerified']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.displayName is string && data.displayName.size() > 0 && data.displayName.size() < 50 &&
+             data.walletBalance is number &&
+             data.totalEarnings is number &&
+             data.bestScore is number &&
+             data.gamesPlayed is int &&
+             data.isVerified is bool;
+    }
+
+    function isValidMatch(data) {
+      return hasRequiredFields(['id', 'uid', 'score', 'timestamp', 'gameLog', 'status']) &&
+             data.id is string &&
+             data.uid is string && data.uid == request.auth.uid &&
+             data.score is number &&
+             data.timestamp is timestamp &&
+             data.gameLog is string && data.gameLog.size() < 100000 &&
+             data.status in ['pending', 'verified', 'flagged'];
+    }
+
+    function isValidDuel(data) {
+      return hasRequiredFields(['id', 'challengerUid', 'opponentUid', 'stake', 'status']) &&
+             data.stake is number && data.stake >= 0 &&
+             data.status in ['pending', 'accepted', 'completed', 'cancelled'];
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      // Users can only read their own profile (contains walletBalance/PII)
+      allow read: if isOwner(userId) || isAdmin();
+      
+      // Create profile on first login
+      allow create: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      request.resource.data.walletBalance == 0 &&
+                      request.resource.data.totalEarnings == 0 &&
+                      request.resource.data.isVerified == false;
+      
+      // Users can update their own displayName and bestScore, but NOT walletBalance or totalEarnings
+      allow update: if isOwner(userId) && isValidUser(request.resource.data) && 
+                      areImmutableFieldsUnchanged(['walletBalance', 'totalEarnings', 'isVerified', 'uid']) ||
+                      isAdmin();
+    }
+
+    match /tournaments/{tournamentId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /matches/{matchId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.uid || isAdmin());
+      allow create: if isAuthenticated() && isValidMatch(request.resource.data) && request.resource.data.status == 'pending';
+      allow update: if isAdmin(); // Only admins/server can verify matches
+    }
+
+    match /duels/{duelId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resource.data.challengerUid || request.auth.uid == resource.data.opponentUid || isAdmin());
+      allow create: if isAuthenticated() && isValidDuel(request.resource.data) && request.resource.data.challengerUid == request.auth.uid;
+      allow update: if isAuthenticated() && (request.auth.uid == resource.data.challengerUid || request.auth.uid == resource.data.opponentUid) && isValidDuel(request.resource.data) || isAdmin();
+    }
+
+    // Default deny
+    match /{path=**} {
+      allow read, write: if false;
+    }
+  }
+}

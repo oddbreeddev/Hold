@@ -4,7 +4,10 @@ export enum GameStatus {
   PLAYING = 'PLAYING',
   PAUSED = 'PAUSED',
   GAMEOVER = 'GAMEOVER',
-  STATS = 'STATS'
+  STATS = 'STATS',
+  WALLET = 'WALLET',
+  LEADERBOARD = 'LEADERBOARD',
+  TOURNAMENTS = 'TOURNAMENTS'
 }
 
 export enum Difficulty {

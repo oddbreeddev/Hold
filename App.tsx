@@ -2,6 +2,36 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { GameStatus, GameState, Difficulty, GameStats } from './types';
 import { audioEngine } from './services/AudioEngine';
+import { 
+  auth, 
+  db, 
+  signIn, 
+  logOut, 
+  UserProfile, 
+  Tournament, 
+  MatchLog, 
+  Duel,
+  OperationType,
+  handleFirestoreError
+} from './firebase';
+import { 
+  onAuthStateChanged, 
+  User as FirebaseUser 
+} from 'firebase/auth';
+import { 
+  doc, 
+  onSnapshot, 
+  collection, 
+  query, 
+  where,
+  orderBy, 
+  limit, 
+  addDoc, 
+  serverTimestamp,
+  updateDoc,
+  increment,
+  getDocs
+} from 'firebase/firestore';
 
 const BEST_SCORE_KEY = 'hold_game_best_score';
 const STATS_KEY = 'hold_game_stats';
@@ -79,6 +109,15 @@ const App: React.FC = () => {
     }
   });
 
+  // Firebase State
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [globalLeaderboard, setGlobalLeaderboard] = useState<UserProfile[]>([]);
+  const [activeTournaments, setActiveTournaments] = useState<Tournament[]>([]);
+  const [activeDuels, setActiveDuels] = useState<Duel[]>([]);
+  const [gameLog, setGameLog] = useState<any[]>([]);
+
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stateRef = useRef<GameState>(state);
   const requestRef = useRef<number>();
@@ -89,8 +128,53 @@ const App: React.FC = () => {
   const nextParticleId = useRef(0);
 
   useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setIsAuthReady(true);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setProfile(null);
+      return;
+    }
+
+    const unsubscribe = onSnapshot(doc(db, 'users', user.uid), (snapshot) => {
+      if (snapshot.exists()) {
+        setProfile(snapshot.data() as UserProfile);
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `users/${user.uid}`);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  useEffect(() => {
+    const q = query(collection(db, 'users'), orderBy('bestScore', 'desc'), limit(10));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const users = snapshot.docs.map(d => d.data() as UserProfile);
+      setGlobalLeaderboard(users);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'users');
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const q = query(collection(db, 'tournaments'), where('status', '==', 'active'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const tournaments = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Tournament));
+      setActiveTournaments(tournaments);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, 'tournaments');
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
@@ -239,6 +323,50 @@ const App: React.FC = () => {
     }
   };
 
+  const gameOver = useCallback(async () => {
+    const s = stateRef.current;
+    audioEngine.playFail();
+    audioEngine.playGameOver();
+    shakeRef.current = 50;
+    setIsDistorted(true);
+    setTimeout(() => setIsDistorted(false), 600);
+    
+    if (navigator.vibrate) {
+      navigator.vibrate([100, 50, 100]);
+    }
+
+    setStats(prev => ({ 
+      ...prev, 
+      totalScore: prev.totalScore + s.score,
+      highestCombo: Math.max(prev.highestCombo, s.combo)
+    }));
+
+    // Sync to Firestore
+    if (user) {
+      try {
+        const matchData = {
+          uid: user.uid,
+          score: s.score,
+          timestamp: serverTimestamp(),
+          gameLog: JSON.stringify(gameLog),
+          status: 'pending'
+        };
+        await addDoc(collection(db, 'matches'), matchData);
+        
+        const userRef = doc(db, 'users', user.uid);
+        await updateDoc(userRef, {
+          bestScore: Math.max(s.score, profile?.bestScore || 0),
+          gamesPlayed: increment(1)
+        });
+      } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, 'matches');
+      }
+    }
+
+    setState(prev => ({ ...prev, status: GameStatus.GAMEOVER, isHolding: false }));
+    setGameLog([]);
+  }, [user, profile, gameLog]);
+
   const handleInput = useCallback((down: boolean) => {
     const s = stateRef.current;
     if (s.status !== GameStatus.PLAYING || s.celebratingMilestone !== null) return;
@@ -246,9 +374,11 @@ const App: React.FC = () => {
     if (down && !s.isHolding) {
       audioEngine.startDrone();
       setState(prev => ({ ...prev, isHolding: true }));
+      setGameLog(prev => [...prev, { type: 'hold', time: Date.now(), radius: s.radius }]);
     } else if (!down && s.isHolding) {
       audioEngine.stopDrone();
       setStats(prev => ({ ...prev, totalAttempts: prev.totalAttempts + 1 }));
+      setGameLog(prev => [...prev, { type: 'release', time: Date.now(), radius: s.radius }]);
       
       const inZone = s.radius >= s.safeMin && s.radius <= s.safeMax;
       
@@ -344,18 +474,10 @@ const App: React.FC = () => {
           navigator.vibrate(100);
         }
 
-        audioEngine.playFail();
-        audioEngine.playGameOver();
-        shakeRef.current = 50;
-        setStats(prev => ({ 
-          ...prev, 
-          totalScore: prev.totalScore + s.score,
-          highestCombo: Math.max(prev.highestCombo, s.combo)
-        }));
-        setState(prev => ({ ...prev, status: GameStatus.GAMEOVER, isHolding: false }));
+        gameOver();
       }
     }
-  }, [newRound]);
+  }, [newRound, gameOver]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -694,6 +816,48 @@ const App: React.FC = () => {
             PLAY
           </button>
 
+          <div className="flex flex-wrap justify-center gap-3 mt-8">
+            <button 
+              onClick={() => {
+                audioEngine.playClick();
+                setState(prev => ({ ...prev, status: GameStatus.LEADERBOARD }));
+              }}
+              onMouseEnter={handleHover}
+              className="px-6 py-3 rounded-xl bg-white/5 border border-white/10 text-white/60 text-[10px] font-bold uppercase tracking-widest hover:bg-white/10 hover:text-white transition-all flex items-center gap-2"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+              </svg>
+              Leaderboard
+            </button>
+            <button 
+              onClick={() => {
+                audioEngine.playClick();
+                setState(prev => ({ ...prev, status: GameStatus.TOURNAMENTS }));
+              }}
+              onMouseEnter={handleHover}
+              className="px-6 py-3 rounded-xl bg-accent/10 border border-accent/20 text-accent text-[10px] font-bold uppercase tracking-widest hover:bg-accent/20 transition-all flex items-center gap-2"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+              </svg>
+              Tournaments
+            </button>
+            <button 
+              onClick={() => {
+                audioEngine.playClick();
+                setState(prev => ({ ...prev, status: GameStatus.WALLET }));
+              }}
+              onMouseEnter={handleHover}
+              className="px-6 py-3 rounded-xl bg-success/10 border border-success/20 text-success text-[10px] font-bold uppercase tracking-widest hover:bg-success/20 transition-all flex items-center gap-2"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="2" y="5" width="20" height="14" rx="2"/><path d="M22 10h-6a2 2 0 0 0 0 4h6"/>
+              </svg>
+              Wallet
+            </button>
+          </div>
+
           {deferredPrompt && (
             <button 
               onClick={handleInstall}
@@ -726,6 +890,166 @@ const App: React.FC = () => {
         </div>
       )}
 
+      {state.status === GameStatus.LEADERBOARD && (
+        <div className="absolute inset-0 z-50 bg-bg flex flex-col p-8 animate-in fade-in slide-in-from-bottom-10 duration-500">
+          <div className="flex items-center justify-between mb-12">
+            <h2 className="font-display text-4xl font-black tracking-tighter">GLOBAL</h2>
+            <button 
+              onClick={() => setState(prev => ({ ...prev, status: GameStatus.INTRO }))}
+              className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+            {globalLeaderboard.map((p, i) => (
+              <div key={p.uid} className={`flex items-center gap-4 p-4 rounded-2xl border ${p.uid === user?.uid ? 'bg-accent/10 border-accent/20' : 'bg-white/5 border-white/10'}`}>
+                <div className="w-8 font-display font-black text-white/20 text-xl">{i + 1}</div>
+                <img src={p.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.uid}`} alt="" className="w-10 h-10 rounded-full bg-white/10" referrerPolicy="no-referrer" />
+                <div className="flex-1">
+                  <p className="font-bold text-sm tracking-tight">{p.displayName}</p>
+                  <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">{p.gamesPlayed} GAMES</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-display font-black text-xl">{p.bestScore}</p>
+                  <p className="text-[8px] text-accent font-bold uppercase tracking-widest">POINTS</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {state.status === GameStatus.WALLET && (
+        <div className="absolute inset-0 z-50 bg-bg flex flex-col p-8 animate-in fade-in slide-in-from-bottom-10 duration-500">
+          <div className="flex items-center justify-between mb-12">
+            <h2 className="font-display text-4xl font-black tracking-tighter">WALLET</h2>
+            <button 
+              onClick={() => setState(prev => ({ ...prev, status: GameStatus.INTRO }))}
+              className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+
+          {!user ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-center">
+              <div className="w-20 h-20 bg-accent/10 rounded-full flex items-center justify-center mb-8 border border-accent/20">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#00f2ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                </svg>
+              </div>
+              <h3 className="font-display text-2xl font-black mb-4">SIGN IN TO EARN</h3>
+              <p className="text-white/40 text-sm mb-10 max-w-xs">Connect your Google account to track earnings, join tournaments, and withdraw real rewards.</p>
+              <button 
+                onClick={signIn}
+                className="bg-white text-bg px-12 py-4 rounded-full font-black text-xs tracking-widest hover:scale-105 active:scale-95 transition-transform"
+              >
+                SIGN IN WITH GOOGLE
+              </button>
+            </div>
+          ) : (
+            <div className="flex-1 flex flex-col">
+              <div className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] mb-8 text-center relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4">
+                  <div className="px-3 py-1 rounded-full bg-success/10 border border-success/20 text-success text-[8px] font-black uppercase tracking-widest">Verified</div>
+                </div>
+                <p className="text-white/40 text-[10px] font-bold uppercase tracking-[0.3em] mb-2">Available Balance</p>
+                <h3 className="font-display text-6xl font-black text-white tracking-tighter mb-2">${profile?.walletBalance.toFixed(2)}</h3>
+                <p className="text-success text-[10px] font-bold uppercase tracking-widest">Total Earned: ${profile?.totalEarnings.toFixed(2)}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 mb-8">
+                <div className="bg-white/5 border border-white/10 p-6 rounded-3xl text-center">
+                  <p className="text-white/40 text-[8px] font-bold uppercase tracking-widest mb-1">Games</p>
+                  <p className="font-display font-black text-2xl">{profile?.gamesPlayed}</p>
+                </div>
+                <div className="bg-white/5 border border-white/10 p-6 rounded-3xl text-center">
+                  <p className="text-white/40 text-[8px] font-bold uppercase tracking-widest mb-1">Best</p>
+                  <p className="font-display font-black text-2xl">{profile?.bestScore}</p>
+                </div>
+              </div>
+
+              <button 
+                disabled={!profile || profile.walletBalance < 5}
+                className="w-full bg-white text-bg py-5 rounded-full font-black text-xs tracking-widest disabled:opacity-20 disabled:grayscale mb-4"
+              >
+                WITHDRAW FUNDS
+              </button>
+              <p className="text-center text-white/20 text-[8px] uppercase tracking-widest">Minimum withdrawal: $5.00</p>
+              
+              <div className="mt-auto pt-8 border-t border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <img src={user.photoURL || ''} alt="" className="w-10 h-10 rounded-full bg-white/10" referrerPolicy="no-referrer" />
+                  <div>
+                    <p className="font-bold text-xs">{user.displayName}</p>
+                    <button onClick={logOut} className="text-danger text-[8px] font-bold uppercase tracking-widest hover:underline">Sign Out</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {state.status === GameStatus.TOURNAMENTS && (
+        <div className="absolute inset-0 z-50 bg-bg flex flex-col p-8 animate-in fade-in slide-in-from-bottom-10 duration-500">
+          <div className="flex items-center justify-between mb-12">
+            <h2 className="font-display text-4xl font-black tracking-tighter">EVENTS</h2>
+            <button 
+              onClick={() => setState(prev => ({ ...prev, status: GameStatus.INTRO }))}
+              className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+
+          <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar">
+            {activeTournaments.length === 0 ? (
+              <div className="flex flex-col items-center justify-center h-64 text-center text-white/20">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-4">
+                  <path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/>
+                </svg>
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em]">No active tournaments</p>
+                <p className="text-[8px] mt-2">Check back soon for the next event.</p>
+              </div>
+            ) : (
+              activeTournaments.map(t => (
+                <div key={t.id} className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 p-6">
+                    <div className="px-3 py-1 rounded-full bg-accent/10 border border-accent/20 text-accent text-[8px] font-black uppercase tracking-widest animate-pulse">Live</div>
+                  </div>
+                  <h3 className="font-display text-2xl font-black mb-2 tracking-tight">{t.title}</h3>
+                  <div className="flex items-center gap-4 mb-8">
+                    <div>
+                      <p className="text-white/40 text-[8px] font-bold uppercase tracking-widest mb-1">Prize Pool</p>
+                      <p className="font-display font-black text-2xl text-perfect">${t.prizePool}</p>
+                    </div>
+                    <div className="w-px h-8 bg-white/10" />
+                    <div>
+                      <p className="text-white/40 text-[8px] font-bold uppercase tracking-widest mb-1">Entry Fee</p>
+                      <p className="font-display font-black text-2xl">${t.entryFee === 0 ? 'FREE' : `$${t.entryFee}`}</p>
+                    </div>
+                  </div>
+                  <button 
+                    onClick={() => startGame(state.difficulty)}
+                    className="w-full bg-white text-bg py-4 rounded-full font-black text-xs tracking-widest hover:scale-105 transition-transform"
+                  >
+                    ENTER TOURNAMENT
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
       {state.status === GameStatus.STATS && (
         <div className="absolute inset-0 z-50 bg-bg flex flex-col items-center justify-center p-10 pointer-events-auto">
           <h2 className="font-display text-5xl font-black mb-12 tracking-tight">STATISTICS</h2>
