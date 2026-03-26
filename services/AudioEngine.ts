@@ -7,17 +7,34 @@ export class AudioEngine {
   private harmonic: OscillatorNode | null = null;
   private harmonicG: GainNode | null = null;
   private pulseInterval: any = null;
+  private isMuted: boolean = false;
 
   init() {
-    if (this.ctx) return;
+    if (this.ctx) {
+      if (this.ctx.state === 'suspended') {
+        this.ctx.resume();
+      }
+      return;
+    }
     try {
       this.ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.25;
+      this.master.gain.value = this.isMuted ? 0 : 0.25;
       this.master.connect(this.ctx.destination);
     } catch (e) {
       console.error("Audio Engine failed to init", e);
     }
+  }
+
+  setMute(mute: boolean) {
+    this.isMuted = mute;
+    if (this.master) {
+      this.master.gain.setTargetAtTime(mute ? 0 : 0.25, this.ctx?.currentTime || 0, 0.1);
+    }
+  }
+
+  getMute() {
+    return this.isMuted;
   }
 
   startDrone() {

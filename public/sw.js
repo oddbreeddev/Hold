@@ -1,4 +1,4 @@
-const CACHE_NAME = 'hold-v4';
+const CACHE_NAME = 'hold-v5';
 const PRECACHE_ASSETS = [
   '/',
   '/index.html',
@@ -12,9 +12,7 @@ const PRECACHE_ASSETS = [
   '/services/AudioEngine.ts',
   '/services/AudioEngine',
   'https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;700&family=Unbounded:wght@400;900&display=swap',
-  'https://cdn.tailwindcss.com',
-  'https://esm.sh/react@^19.2.4',
-  'https://esm.sh/react-dom@^19.2.4'
+  'https://cdn.tailwindcss.com'
 ];
 
 self.addEventListener('install', (event) => {

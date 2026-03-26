@@ -5,6 +5,7 @@ import { audioEngine } from './services/AudioEngine';
 
 const BEST_SCORE_KEY = 'hold_game_best_score';
 const STATS_KEY = 'hold_game_stats';
+const ACHIEVED_MILESTONES_KEY = 'hold_game_achieved_milestones';
 
 const INITIAL_STATS: GameStats = {
   totalPlaytime: 0,
@@ -34,27 +35,48 @@ interface Particle {
 }
 
 const App: React.FC = () => {
-  const [state, setState] = useState<GameState>({
-    status: GameStatus.INTRO,
-    difficulty: Difficulty.MEDIUM,
-    score: 0,
-    best: Number(localStorage.getItem(BEST_SCORE_KEY)) || 0,
-    combo: 0,
-    radius: 0,
-    safeMin: 100,
-    safeMax: 150,
-    speed: 3,
-    isHolding: false,
-    celebratingMilestone: null,
+  const [state, setState] = useState<GameState>(() => {
+    let best = 0;
+    try {
+      best = Number(localStorage.getItem(BEST_SCORE_KEY)) || 0;
+    } catch (e) {}
+    return {
+      status: GameStatus.INTRO,
+      difficulty: Difficulty.MEDIUM,
+      score: 0,
+      best,
+      combo: 0,
+      radius: 0,
+      safeMin: 100,
+      safeMax: 150,
+      speed: 3,
+      isHolding: false,
+      celebratingMilestone: null,
+    };
   });
 
   const [feedback, setFeedback] = useState<FeedbackMessage[]>([]);
   const [isScorePopping, setIsScorePopping] = useState(false);
   const [isDistorted, setIsDistorted] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [showInstallBanner, setShowInstallBanner] = useState(false);
+  const [achievedMilestones, setAchievedMilestones] = useState<number[]>(() => {
+    try {
+      const saved = localStorage.getItem(ACHIEVED_MILESTONES_KEY);
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   const [stats, setStats] = useState<GameStats>(() => {
-    const saved = localStorage.getItem(STATS_KEY);
-    return saved ? JSON.parse(saved) : INITIAL_STATS;
+    try {
+      const saved = localStorage.getItem(STATS_KEY);
+      return saved ? JSON.parse(saved) : INITIAL_STATS;
+    } catch (e) {
+      return INITIAL_STATS;
+    }
   });
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -71,16 +93,41 @@ const App: React.FC = () => {
   }, [state]);
 
   useEffect(() => {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+    setIsInstalled(isStandalone);
+    
     const handler = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
+      if (!isStandalone) {
+        setShowInstallBanner(true);
+      }
     };
     window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
+    
+    const appInstalledHandler = () => {
+      setIsInstalled(true);
+      setShowInstallBanner(false);
+      setDeferredPrompt(null);
+    };
+    window.addEventListener('appinstalled', appInstalledHandler);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handler);
+      window.removeEventListener('appinstalled', appInstalledHandler);
+    };
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+    try {
+      localStorage.setItem(ACHIEVED_MILESTONES_KEY, JSON.stringify(achievedMilestones));
+    } catch (e) {}
+  }, [achievedMilestones]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STATS_KEY, JSON.stringify(stats));
+    } catch (e) {}
   }, [stats]);
 
   useEffect(() => {
@@ -169,6 +216,18 @@ const App: React.FC = () => {
     }
   };
 
+  const toggleMute = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    const nextMute = !isMuted;
+    setIsMuted(nextMute);
+    audioEngine.setMute(nextMute);
+    audioEngine.playClick();
+  };
+
+  const handleHover = () => {
+    audioEngine.playClick();
+  };
+
   const togglePause = (e?: React.MouseEvent) => {
     e?.stopPropagation();
     audioEngine.playClick();
@@ -239,26 +298,36 @@ const App: React.FC = () => {
 
         const nextScore = s.score + points;
         const nextBest = Math.max(nextScore, s.best);
-        if (nextBest > s.best) localStorage.setItem(BEST_SCORE_KEY, nextBest.toString());
+        if (nextBest > s.best) {
+          try {
+            localStorage.setItem(BEST_SCORE_KEY, nextBest.toString());
+          } catch (e) {}
+        }
 
         // Milestone Check
-        const milestones = [100, 500, 1000, 2500, 5000, 10000];
+        const milestones = [100, 500, 1000, 2500, 5000, 10000, 25000, 50000];
         const reachedMilestone = milestones.find(m => s.score < m && nextScore >= m);
+        const isNewMilestone = reachedMilestone && !achievedMilestones.includes(reachedMilestone);
         
         setIsScorePopping(true);
         setTimeout(() => setIsScorePopping(false), 200);
 
         audioEngine.playSuccess(newCombo);
+        
+        if (isNewMilestone) {
+          setAchievedMilestones(prev => [...prev, reachedMilestone]);
+        }
+
         setState(prev => ({ 
           ...prev, 
           score: nextScore, 
           best: nextBest, 
           combo: newCombo,
           isHolding: false,
-          celebratingMilestone: reachedMilestone || null
+          celebratingMilestone: isNewMilestone ? reachedMilestone : null
         }));
 
-        if (reachedMilestone) {
+        if (isNewMilestone) {
           audioEngine.playComboMilestone();
           spawnParticles(window.innerWidth / 2, window.innerHeight / 2, '#ffea00', 60);
         } else {
@@ -458,19 +527,35 @@ const App: React.FC = () => {
             COMBO X{state.combo}
           </div>
         </div>
-        <button 
-          onClick={togglePause}
-          className="pointer-events-auto w-12 h-12 rounded-full border border-white/10 bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors"
-          disabled={state.celebratingMilestone !== null}
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-            {state.status === GameStatus.PAUSED ? (
-              <path d="M8 5v14l11-7z"/>
-            ) : (
-              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
-            )}
-          </svg>
-        </button>
+        <div className="flex gap-2 pointer-events-auto">
+          <button 
+            onClick={toggleMute}
+            onMouseEnter={handleHover}
+            className="w-12 h-12 rounded-full border border-white/10 bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {isMuted ? (
+                <path d="M11 5L6 9H2v6h4l5 4V5zM23 9l-6 6M17 9l6 6"/>
+              ) : (
+                <path d="M11 5L6 9H2v6h4l5 4V5zM19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
+              )}
+            </svg>
+          </button>
+          <button 
+            onClick={togglePause}
+            onMouseEnter={handleHover}
+            className="w-12 h-12 rounded-full border border-white/10 bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors"
+            disabled={state.celebratingMilestone !== null}
+          >
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+              {state.status === GameStatus.PAUSED ? (
+                <path d="M8 5v14l11-7z"/>
+              ) : (
+                <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+              )}
+            </svg>
+          </button>
+        </div>
       </div>
 
       {state.celebratingMilestone !== null && (
@@ -499,6 +584,7 @@ const App: React.FC = () => {
                 setState(prev => ({ ...prev, celebratingMilestone: null }));
                 newRound(state.score, state.difficulty);
               }}
+              onMouseEnter={handleHover}
               className="bg-white text-bg px-12 py-4 rounded-full font-black text-xs tracking-widest hover:scale-105 active:scale-95 transition-transform w-full"
             >
               CONTINUE
@@ -509,6 +595,34 @@ const App: React.FC = () => {
 
       {state.status === GameStatus.INTRO && (
         <div className="absolute inset-0 z-50 bg-bg flex flex-col items-center justify-center p-10 text-center pointer-events-auto">
+          {showInstallBanner && !isInstalled && (
+            <div className="absolute top-0 left-0 w-full p-4 bg-accent/20 border-b border-accent/30 backdrop-blur-md flex items-center justify-between animate-in slide-in-from-top duration-500">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-accent flex items-center justify-center shadow-[0_0_15px_rgba(0,242,255,0.5)]">
+                  <div className="w-4 h-4 border-2 border-bg rounded-full" />
+                </div>
+                <div className="text-left">
+                  <p className="text-white font-bold text-[10px] uppercase tracking-wider">Install HOLD.</p>
+                  <p className="text-white/60 text-[8px] uppercase tracking-widest">Play offline & full screen</p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setShowInstallBanner(false)}
+                  className="px-3 py-2 rounded-lg text-white/40 text-[8px] font-bold uppercase tracking-widest hover:text-white"
+                >
+                  Later
+                </button>
+                <button 
+                  onClick={handleInstall}
+                  className="px-4 py-2 rounded-lg bg-white text-bg text-[8px] font-black uppercase tracking-widest shadow-lg"
+                >
+                  Install
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="w-20 h-20 border-4 border-accent rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(0,242,255,0.4)] mb-8 animate-pulse">
              <div className="w-8 h-8 border-4 border-accent rounded-full" />
           </div>
@@ -560,6 +674,7 @@ const App: React.FC = () => {
                   audioEngine.playClick();
                   setState(prev => ({ ...prev, difficulty: d }));
                 }}
+                onMouseEnter={handleHover}
                 className={`px-4 py-2 rounded-lg font-bold text-[10px] tracking-widest transition-all ${
                   state.difficulty === d 
                     ? 'bg-white text-bg scale-105 shadow-lg' 
@@ -573,6 +688,7 @@ const App: React.FC = () => {
 
           <button 
             onClick={() => startGame(state.difficulty)}
+            onMouseEnter={handleHover}
             className="bg-white text-bg px-16 py-4 rounded-full font-black text-sm tracking-[0.2em] hover:scale-110 transition-transform shadow-[0_15px_40_rgba(255,255,255,0.2)] active:scale-95"
           >
             PLAY
@@ -581,6 +697,7 @@ const App: React.FC = () => {
           {deferredPrompt && (
             <button 
               onClick={handleInstall}
+              onMouseEnter={handleHover}
               className="mt-6 flex items-center gap-2 text-accent/60 hover:text-accent transition-colors group"
             >
               <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center group-hover:bg-accent/20">
@@ -597,6 +714,7 @@ const App: React.FC = () => {
               audioEngine.playClick();
               setState(prev => ({ ...prev, status: GameStatus.STATS }));
             }}
+            onMouseEnter={handleHover}
             className="mt-4 text-white/40 text-[10px] uppercase tracking-[0.4em] font-bold hover:text-white transition-colors"
           >
             VIEW STATISTICS
@@ -642,6 +760,7 @@ const App: React.FC = () => {
               audioEngine.playClick();
               setState(prev => ({ ...prev, status: GameStatus.INTRO }));
             }}
+            onMouseEnter={handleHover}
             className="bg-white text-bg px-14 py-5 rounded-full font-black text-xs tracking-widest w-full max-w-xs active:scale-95 transition-transform"
           >
             BACK TO MENU
@@ -654,6 +773,7 @@ const App: React.FC = () => {
           <h2 className="font-display text-5xl font-black mb-12 tracking-tight">PAUSED</h2>
           <button 
             onClick={() => togglePause()}
+            onMouseEnter={handleHover}
             className="bg-white text-bg px-14 py-5 rounded-full font-black text-xs tracking-widest mb-4 w-full max-w-xs active:scale-95 transition-transform"
           >
             CONTINUE
@@ -663,6 +783,7 @@ const App: React.FC = () => {
               audioEngine.playClick();
               setState(prev => ({ ...prev, status: GameStatus.INTRO }));
             }}
+            onMouseEnter={handleHover}
             className="border-2 border-white/10 text-white/60 px-14 py-5 rounded-full font-black text-xs tracking-widest w-full max-w-xs hover:bg-white/5 transition-colors"
           >
             EXIT TO MENU
@@ -680,6 +801,7 @@ const App: React.FC = () => {
           
           <button 
             onClick={() => startGame(state.difficulty)}
+            onMouseEnter={handleHover}
             className="bg-white text-bg px-16 py-5 rounded-full font-black text-xs tracking-[0.2em] mb-4 w-full max-w-xs hover:scale-105 active:scale-95 transition-transform shadow-[0_20px_50px_rgba(255,45,85,0.2)]"
           >
             TRY AGAIN
@@ -689,6 +811,7 @@ const App: React.FC = () => {
               audioEngine.playClick();
               setState(prev => ({ ...prev, status: GameStatus.INTRO }));
             }}
+            onMouseEnter={handleHover}
             className="border-2 border-white/5 text-white/40 px-16 py-5 rounded-full font-black text-xs tracking-[0.2em] w-full max-w-xs hover:bg-white/5 transition-colors"
           >
             MAIN MENU
