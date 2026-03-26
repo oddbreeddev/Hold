@@ -1,0 +1,24 @@
+{
+  "name": "HOLD. // Play-to-Earn Precision Game",
+  "short_name": "HOLD.",
+  "description": "Master the art of precision in HOLD. A minimalist rhythm game where you hold to grow and release to score.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#08080c",
+  "theme_color": "#08080c",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
