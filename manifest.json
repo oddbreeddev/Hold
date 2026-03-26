@@ -4,8 +4,8 @@
   "description": "Master the art of precision in HOLD. A minimalist rhythm game where you hold to grow and release to score.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#08080c",
-  "theme_color": "#08080c",
+  "background_color": "#050505",
+  "theme_color": "#050505",
   "orientation": "portrait",
   "icons": [
     {

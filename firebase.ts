@@ -58,13 +58,16 @@ export interface Duel {
 
 // Auth Helpers
 export const signIn = async () => {
+  console.log("Attempting sign in...");
   try {
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
+    console.log("Sign in successful for user:", user.uid);
     
     // Check if user profile exists, if not create it
     const userDoc = await getDoc(doc(db, 'users', user.uid));
     if (!userDoc.exists()) {
+      console.log("Creating new user profile...");
       const newUser: UserProfile = {
         uid: user.uid,
         displayName: user.displayName || 'Anonymous Player',
@@ -76,10 +79,16 @@ export const signIn = async () => {
         isVerified: false
       };
       await setDoc(doc(db, 'users', user.uid), newUser);
+      console.log("User profile created.");
     }
     return user;
-  } catch (error) {
-    console.error("Error signing in:", error);
+  } catch (error: any) {
+    console.error("Error signing in:", error.code, error.message);
+    if (error.code === 'auth/popup-blocked') {
+      alert("Popup blocked! Please allow popups for this site.");
+    } else if (error.code === 'auth/unauthorized-domain') {
+      alert("Unauthorized domain! This domain needs to be added to Firebase Console.");
+    }
     throw error;
   }
 };

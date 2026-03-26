@@ -291,6 +291,15 @@ const App: React.FC = () => {
     setState(prev => ({ ...prev, status: GameStatus.PLAYING, difficulty, score: 0, combo: 0, celebratingMilestone: null }));
   };
 
+  const handleSignIn = async () => {
+    try {
+      audioEngine.playClick();
+      await signIn();
+    } catch (error: any) {
+      console.error("Login failed:", error);
+    }
+  };
+
   const handleInstall = async () => {
     if (!deferredPrompt) return;
     deferredPrompt.prompt();
@@ -748,9 +757,36 @@ const App: React.FC = () => {
           <div className="w-20 h-20 border-4 border-accent rounded-full flex items-center justify-center shadow-[0_0_40px_rgba(0,242,255,0.4)] mb-8 animate-pulse">
              <div className="w-8 h-8 border-4 border-accent rounded-full" />
           </div>
-          <h1 className="font-display text-7xl font-black mb-8 tracking-tighter">HOLD.</h1>
+          <h1 className="font-display text-8xl font-light mb-2 tracking-tighter text-white">HOLD.</h1>
+          <p className="font-display italic text-accent/60 text-lg mb-12 tracking-wide">Precision is the only currency.</p>
           
-          <div className="flex flex-col gap-5 max-w-xs mb-10 text-left">
+          {!user ? (
+            <button 
+              onClick={handleSignIn}
+              onMouseEnter={handleHover}
+              className="mb-12 group flex items-center gap-4 bg-white/5 border border-white/10 px-8 py-4 rounded-2xl hover:bg-white/10 transition-all"
+            >
+              <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center text-accent group-hover:scale-110 transition-transform">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+                </svg>
+              </div>
+              <div className="text-left">
+                <p className="text-white font-bold text-xs uppercase tracking-widest">Connect Account</p>
+                <p className="text-white/40 text-[10px] uppercase tracking-widest">Sign in to earn rewards</p>
+              </div>
+            </button>
+          ) : (
+            <div className="mb-12 flex items-center gap-4 bg-white/5 border border-white/10 px-6 py-3 rounded-2xl">
+              <img src={user.photoURL || ''} alt="" className="w-10 h-10 rounded-full border border-white/10" referrerPolicy="no-referrer" />
+              <div className="text-left">
+                <p className="text-white font-bold text-xs uppercase tracking-widest">{user.displayName}</p>
+                <p className="text-success text-[10px] font-bold uppercase tracking-widest">${profile?.walletBalance.toFixed(2)} Available</p>
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-6 max-w-xs mb-12 text-left">
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 rounded-xl bg-accent/10 border border-accent/20 flex-shrink-0 flex items-center justify-center text-accent">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -788,7 +824,7 @@ const App: React.FC = () => {
             </div>
           </div>
 
-          <div className="flex gap-2 mb-8">
+          <div className="flex gap-3 mb-12">
             {[Difficulty.EASY, Difficulty.MEDIUM, Difficulty.HARD].map((d) => (
               <button
                 key={d}
@@ -797,10 +833,10 @@ const App: React.FC = () => {
                   setState(prev => ({ ...prev, difficulty: d }));
                 }}
                 onMouseEnter={handleHover}
-                className={`px-4 py-2 rounded-lg font-bold text-[10px] tracking-widest transition-all ${
+                className={`px-6 py-3 rounded-xl font-bold text-[10px] tracking-[0.3em] transition-all uppercase ${
                   state.difficulty === d 
-                    ? 'bg-white text-bg scale-105 shadow-lg' 
-                    : 'bg-white/5 text-white/40 border border-white/10 hover:bg-white/10'
+                    ? 'bg-white text-bg scale-105 shadow-[0_0_30px_rgba(255,255,255,0.2)]' 
+                    : 'bg-white/5 text-white/30 border border-white/10 hover:bg-white/10 hover:text-white'
                 }`}
               >
                 {d}
@@ -811,9 +847,10 @@ const App: React.FC = () => {
           <button 
             onClick={() => startGame(state.difficulty)}
             onMouseEnter={handleHover}
-            className="bg-white text-bg px-16 py-4 rounded-full font-black text-sm tracking-[0.2em] hover:scale-110 transition-transform shadow-[0_15px_40_rgba(255,255,255,0.2)] active:scale-95"
+            className="group relative bg-white text-bg px-20 py-5 rounded-full font-black text-sm tracking-[0.4em] hover:scale-105 transition-all shadow-[0_20px_60px_rgba(255,255,255,0.15)] active:scale-95 overflow-hidden"
           >
-            PLAY
+            <div className="absolute inset-0 bg-accent/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+            <span className="relative z-10">START SESSION</span>
           </button>
 
           <div className="flex flex-wrap justify-center gap-3 mt-8">
@@ -891,31 +928,43 @@ const App: React.FC = () => {
       )}
 
       {state.status === GameStatus.LEADERBOARD && (
-        <div className="absolute inset-0 z-50 bg-bg flex flex-col p-8 animate-in fade-in slide-in-from-bottom-10 duration-500">
-          <div className="flex items-center justify-between mb-12">
-            <h2 className="font-display text-4xl font-black tracking-tighter">GLOBAL</h2>
+        <div className="absolute inset-0 z-50 bg-bg flex flex-col p-12 animate-in fade-in slide-in-from-bottom-10 duration-700">
+          <div className="flex items-center justify-between mb-16">
+            <div>
+              <h2 className="font-display text-6xl font-light tracking-tighter text-white">GLOBAL</h2>
+              <p className="font-display italic text-accent/60 text-lg tracking-wide">The elite precisionists.</p>
+            </div>
             <button 
               onClick={() => setState(prev => ({ ...prev, status: GameStatus.INTRO }))}
-              className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10"
+              className="w-12 h-12 rounded-full border border-white/10 bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 6L6 18M6 6l12 12"/>
               </svg>
             </button>
           </div>
 
-          <div className="flex-1 overflow-y-auto space-y-4 pr-2 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto space-y-6 pr-4 custom-scrollbar">
             {globalLeaderboard.map((p, i) => (
-              <div key={p.uid} className={`flex items-center gap-4 p-4 rounded-2xl border ${p.uid === user?.uid ? 'bg-accent/10 border-accent/20' : 'bg-white/5 border-white/10'}`}>
-                <div className="w-8 font-display font-black text-white/20 text-xl">{i + 1}</div>
-                <img src={p.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.uid}`} alt="" className="w-10 h-10 rounded-full bg-white/10" referrerPolicy="no-referrer" />
+              <div key={p.uid} className={`group flex items-center gap-6 p-6 rounded-[2rem] border transition-all duration-300 ${p.uid === user?.uid ? 'bg-accent/10 border-accent/30 shadow-[0_0_30px_rgba(0,242,255,0.1)]' : 'bg-white/5 border-white/5 hover:border-white/20'}`}>
+                <div className="w-10 font-display italic text-white/20 text-3xl">{i + 1}</div>
+                <div className="relative">
+                  <img src={p.photoURL || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.uid}`} alt="" className="w-14 h-14 rounded-full bg-white/10 border border-white/10" referrerPolicy="no-referrer" />
+                  {i < 3 && (
+                    <div className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-perfect flex items-center justify-center shadow-lg">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#000" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+                      </svg>
+                    </div>
+                  )}
+                </div>
                 <div className="flex-1">
-                  <p className="font-bold text-sm tracking-tight">{p.displayName}</p>
-                  <p className="text-[10px] text-white/40 uppercase tracking-widest font-bold">{p.gamesPlayed} GAMES</p>
+                  <p className="font-bold text-lg tracking-tight text-white/90">{p.displayName}</p>
+                  <p className="text-[10px] text-white/30 uppercase tracking-[0.3em] font-bold">{p.gamesPlayed} SESSIONS</p>
                 </div>
                 <div className="text-right">
-                  <p className="font-display font-black text-xl">{p.bestScore}</p>
-                  <p className="text-[8px] text-accent font-bold uppercase tracking-widest">POINTS</p>
+                  <p className="font-display font-light text-4xl text-white">{p.bestScore}</p>
+                  <p className="text-[9px] text-accent font-bold uppercase tracking-[0.4em]">POINTS</p>
                 </div>
               </div>
             ))}
@@ -924,14 +973,17 @@ const App: React.FC = () => {
       )}
 
       {state.status === GameStatus.WALLET && (
-        <div className="absolute inset-0 z-50 bg-bg flex flex-col p-8 animate-in fade-in slide-in-from-bottom-10 duration-500">
-          <div className="flex items-center justify-between mb-12">
-            <h2 className="font-display text-4xl font-black tracking-tighter">WALLET</h2>
+        <div className="absolute inset-0 z-50 bg-bg flex flex-col p-12 animate-in fade-in slide-in-from-bottom-10 duration-700">
+          <div className="flex items-center justify-between mb-16">
+            <div>
+              <h2 className="font-display text-6xl font-light tracking-tighter text-white">WALLET</h2>
+              <p className="font-display italic text-accent/60 text-lg tracking-wide">Your precision, rewarded.</p>
+            </div>
             <button 
               onClick={() => setState(prev => ({ ...prev, status: GameStatus.INTRO }))}
-              className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10"
+              className="w-12 h-12 rounded-full border border-white/10 bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 6L6 18M6 6l12 12"/>
               </svg>
             </button>
@@ -939,57 +991,68 @@ const App: React.FC = () => {
 
           {!user ? (
             <div className="flex-1 flex flex-col items-center justify-center text-center">
-              <div className="w-20 h-20 bg-accent/10 rounded-full flex items-center justify-center mb-8 border border-accent/20">
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#00f2ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <div className="w-24 h-24 bg-accent/5 rounded-full flex items-center justify-center mb-10 border border-accent/10 relative">
+                <div className="absolute inset-0 rounded-full border border-accent/20 animate-ping opacity-20" />
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#00f2ff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
                 </svg>
               </div>
-              <h3 className="font-display text-2xl font-black mb-4">SIGN IN TO EARN</h3>
-              <p className="text-white/40 text-sm mb-10 max-w-xs">Connect your Google account to track earnings, join tournaments, and withdraw real rewards.</p>
+              <h3 className="font-display text-4xl font-light mb-6 tracking-tight">SECURE ACCESS</h3>
+              <p className="text-white/40 font-display italic text-lg mb-12 max-w-xs leading-relaxed">Connect your identity to unlock the full potential of your precision.</p>
               <button 
-                onClick={signIn}
-                className="bg-white text-bg px-12 py-4 rounded-full font-black text-xs tracking-widest hover:scale-105 active:scale-95 transition-transform"
+                onClick={handleSignIn}
+                className="group relative bg-white text-bg px-16 py-5 rounded-full font-black text-xs tracking-[0.3em] hover:scale-105 active:scale-95 transition-all shadow-[0_20px_60px_rgba(255,255,255,0.1)] overflow-hidden"
               >
-                SIGN IN WITH GOOGLE
+                <div className="absolute inset-0 bg-accent/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+                <span className="relative z-10">SIGN IN WITH GOOGLE</span>
               </button>
             </div>
           ) : (
             <div className="flex-1 flex flex-col">
-              <div className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] mb-8 text-center relative overflow-hidden">
-                <div className="absolute top-0 right-0 p-4">
-                  <div className="px-3 py-1 rounded-full bg-success/10 border border-success/20 text-success text-[8px] font-black uppercase tracking-widest">Verified</div>
+              <div className="bg-white/5 border border-white/5 p-12 rounded-[3rem] mb-10 text-center relative overflow-hidden group">
+                <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                <div className="absolute top-0 right-0 p-8">
+                  <div className="px-4 py-1.5 rounded-full bg-success/10 border border-success/20 text-success text-[9px] font-black uppercase tracking-[0.2em]">Verified Account</div>
                 </div>
-                <p className="text-white/40 text-[10px] font-bold uppercase tracking-[0.3em] mb-2">Available Balance</p>
-                <h3 className="font-display text-6xl font-black text-white tracking-tighter mb-2">${profile?.walletBalance.toFixed(2)}</h3>
-                <p className="text-success text-[10px] font-bold uppercase tracking-widest">Total Earned: ${profile?.totalEarnings.toFixed(2)}</p>
+                <p className="text-white/30 text-[11px] font-bold uppercase tracking-[0.5em] mb-4">Available Balance</p>
+                <h3 className="font-display text-8xl font-light text-white tracking-tighter mb-4">${profile?.walletBalance.toFixed(2)}</h3>
+                <div className="flex items-center justify-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-success animate-pulse" />
+                  <p className="text-success/80 font-display italic text-xl">Total Earned: ${profile?.totalEarnings.toFixed(2)}</p>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4 mb-8">
-                <div className="bg-white/5 border border-white/10 p-6 rounded-3xl text-center">
-                  <p className="text-white/40 text-[8px] font-bold uppercase tracking-widest mb-1">Games</p>
-                  <p className="font-display font-black text-2xl">{profile?.gamesPlayed}</p>
+              <div className="grid grid-cols-2 gap-6 mb-10">
+                <div className="bg-white/5 border border-white/5 p-8 rounded-[2rem] text-center hover:bg-white/10 transition-colors group">
+                  <p className="text-white/30 text-[9px] font-bold uppercase tracking-[0.4em] mb-2 group-hover:text-white/50 transition-colors">Sessions</p>
+                  <p className="font-display font-light text-4xl text-white">{profile?.gamesPlayed}</p>
                 </div>
-                <div className="bg-white/5 border border-white/10 p-6 rounded-3xl text-center">
-                  <p className="text-white/40 text-[8px] font-bold uppercase tracking-widest mb-1">Best</p>
-                  <p className="font-display font-black text-2xl">{profile?.bestScore}</p>
+                <div className="bg-white/5 border border-white/5 p-8 rounded-[2rem] text-center hover:bg-white/10 transition-colors group">
+                  <p className="text-white/30 text-[9px] font-bold uppercase tracking-[0.4em] mb-2 group-hover:text-white/50 transition-colors">Peak Score</p>
+                  <p className="font-display font-light text-4xl text-white">{profile?.bestScore}</p>
                 </div>
               </div>
 
               <button 
                 disabled={!profile || profile.walletBalance < 5}
-                className="w-full bg-white text-bg py-5 rounded-full font-black text-xs tracking-widest disabled:opacity-20 disabled:grayscale mb-4"
+                className="group relative w-full bg-white text-bg py-6 rounded-full font-black text-xs tracking-[0.4em] disabled:opacity-10 disabled:grayscale mb-6 overflow-hidden transition-all hover:scale-[1.02] active:scale-95"
               >
-                WITHDRAW FUNDS
+                <div className="absolute inset-0 bg-success/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+                <span className="relative z-10">WITHDRAW FUNDS</span>
               </button>
-              <p className="text-center text-white/20 text-[8px] uppercase tracking-widest">Minimum withdrawal: $5.00</p>
+              <p className="text-center text-white/20 text-[9px] uppercase tracking-[0.5em] font-bold">Minimum withdrawal: $5.00</p>
               
-              <div className="mt-auto pt-8 border-t border-white/5 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <img src={user.photoURL || ''} alt="" className="w-10 h-10 rounded-full bg-white/10" referrerPolicy="no-referrer" />
+              <div className="mt-auto pt-10 border-t border-white/5 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <img src={user.photoURL || ''} alt="" className="w-14 h-14 rounded-full border border-white/10" referrerPolicy="no-referrer" />
                   <div>
-                    <p className="font-bold text-xs">{user.displayName}</p>
-                    <button onClick={logOut} className="text-danger text-[8px] font-bold uppercase tracking-widest hover:underline">Sign Out</button>
+                    <p className="font-bold text-sm text-white/90">{user.displayName}</p>
+                    <button onClick={logOut} className="text-danger/60 text-[9px] font-bold uppercase tracking-[0.3em] hover:text-danger transition-colors">Terminate Session</button>
                   </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-white/20 text-[8px] uppercase tracking-[0.3em] font-bold mb-1">Status</p>
+                  <p className="text-success text-[10px] font-bold uppercase tracking-[0.2em]">Online</p>
                 </div>
               </div>
             </div>
@@ -998,51 +1061,58 @@ const App: React.FC = () => {
       )}
 
       {state.status === GameStatus.TOURNAMENTS && (
-        <div className="absolute inset-0 z-50 bg-bg flex flex-col p-8 animate-in fade-in slide-in-from-bottom-10 duration-500">
-          <div className="flex items-center justify-between mb-12">
-            <h2 className="font-display text-4xl font-black tracking-tighter">EVENTS</h2>
+        <div className="absolute inset-0 z-50 bg-bg flex flex-col p-12 animate-in fade-in slide-in-from-bottom-10 duration-700">
+          <div className="flex items-center justify-between mb-16">
+            <div>
+              <h2 className="font-display text-6xl font-light tracking-tighter text-white">EVENTS</h2>
+              <p className="font-display italic text-accent/60 text-lg tracking-wide">High stakes precision.</p>
+            </div>
             <button 
               onClick={() => setState(prev => ({ ...prev, status: GameStatus.INTRO }))}
-              className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center hover:bg-white/10"
+              className="w-12 h-12 rounded-full border border-white/10 bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors"
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 6L6 18M6 6l12 12"/>
               </svg>
             </button>
           </div>
 
-          <div className="flex-1 space-y-6 overflow-y-auto pr-2 custom-scrollbar">
+          <div className="flex-1 space-y-8 overflow-y-auto pr-4 custom-scrollbar">
             {activeTournaments.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-64 text-center text-white/20">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round" className="mb-4">
-                  <path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/>
-                </svg>
-                <p className="text-[10px] font-bold uppercase tracking-[0.3em]">No active tournaments</p>
-                <p className="text-[8px] mt-2">Check back soon for the next event.</p>
+              <div className="flex flex-col items-center justify-center h-96 text-center">
+                <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-10 border border-white/10 opacity-20">
+                  <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 8v4l3 3"/><circle cx="12" cy="12" r="10"/>
+                  </svg>
+                </div>
+                <p className="font-display italic text-white/30 text-2xl tracking-wide">The arena is currently silent.</p>
+                <p className="text-[10px] mt-4 text-white/20 uppercase tracking-[0.5em] font-bold">Check back soon for the next event.</p>
               </div>
             ) : (
               activeTournaments.map(t => (
-                <div key={t.id} className="bg-white/5 border border-white/10 p-8 rounded-[2.5rem] relative overflow-hidden group">
-                  <div className="absolute top-0 right-0 p-6">
-                    <div className="px-3 py-1 rounded-full bg-accent/10 border border-accent/20 text-accent text-[8px] font-black uppercase tracking-widest animate-pulse">Live</div>
+                <div key={t.id} className="bg-white/5 border border-white/5 p-12 rounded-[3rem] relative overflow-hidden group hover:bg-white/10 transition-all duration-500">
+                  <div className="absolute inset-0 bg-gradient-to-br from-accent/5 via-transparent to-perfect/5 opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+                  <div className="absolute top-0 right-0 p-10">
+                    <div className="px-4 py-1.5 rounded-full bg-accent/10 border border-accent/20 text-accent text-[9px] font-black uppercase tracking-[0.3em] animate-pulse">Live Event</div>
                   </div>
-                  <h3 className="font-display text-2xl font-black mb-2 tracking-tight">{t.title}</h3>
-                  <div className="flex items-center gap-4 mb-8">
+                  <h3 className="font-display text-4xl font-light mb-4 tracking-tight text-white group-hover:translate-x-2 transition-transform duration-500">{t.title}</h3>
+                  <div className="flex items-center gap-10 mb-12">
                     <div>
-                      <p className="text-white/40 text-[8px] font-bold uppercase tracking-widest mb-1">Prize Pool</p>
-                      <p className="font-display font-black text-2xl text-perfect">${t.prizePool}</p>
+                      <p className="text-white/30 text-[10px] font-bold uppercase tracking-[0.4em] mb-2">Prize Pool</p>
+                      <p className="font-display font-light text-5xl text-perfect">${t.prizePool}</p>
                     </div>
-                    <div className="w-px h-8 bg-white/10" />
+                    <div className="w-px h-12 bg-white/10" />
                     <div>
-                      <p className="text-white/40 text-[8px] font-bold uppercase tracking-widest mb-1">Entry Fee</p>
-                      <p className="font-display font-black text-2xl">${t.entryFee === 0 ? 'FREE' : `$${t.entryFee}`}</p>
+                      <p className="text-white/30 text-[10px] font-bold uppercase tracking-[0.4em] mb-2">Entry Fee</p>
+                      <p className="font-display font-light text-5xl text-white">{t.entryFee === 0 ? 'FREE' : `$${t.entryFee}`}</p>
                     </div>
                   </div>
                   <button 
                     onClick={() => startGame(state.difficulty)}
-                    className="w-full bg-white text-bg py-4 rounded-full font-black text-xs tracking-widest hover:scale-105 transition-transform"
+                    className="group relative w-full bg-white text-bg py-6 rounded-full font-black text-xs tracking-[0.4em] hover:scale-[1.02] active:scale-95 transition-all overflow-hidden"
                   >
-                    ENTER TOURNAMENT
+                    <div className="absolute inset-0 bg-accent/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+                    <span className="relative z-10">ENTER THE ARENA</span>
                   </button>
                 </div>
               ))
@@ -1051,30 +1121,43 @@ const App: React.FC = () => {
         </div>
       )}
       {state.status === GameStatus.STATS && (
-        <div className="absolute inset-0 z-50 bg-bg flex flex-col items-center justify-center p-10 pointer-events-auto">
-          <h2 className="font-display text-5xl font-black mb-12 tracking-tight">STATISTICS</h2>
+        <div className="absolute inset-0 z-50 bg-bg flex flex-col p-12 animate-in fade-in slide-in-from-bottom-10 duration-700">
+          <div className="flex items-center justify-between mb-16">
+            <div>
+              <h2 className="font-display text-6xl font-light tracking-tighter text-white">STATISTICS</h2>
+              <p className="font-display italic text-accent/60 text-lg tracking-wide">Your journey in numbers.</p>
+            </div>
+            <button 
+              onClick={() => setState(prev => ({ ...prev, status: GameStatus.INTRO }))}
+              className="w-12 h-12 rounded-full border border-white/10 bg-white/5 flex items-center justify-center hover:bg-white/10 transition-colors"
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 6L6 18M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
           
-          <div className="grid grid-cols-2 gap-8 w-full max-w-md mb-16">
-            <div className="flex flex-col">
-              <span className="text-white/30 text-[10px] uppercase tracking-widest font-bold mb-1">Playtime</span>
-              <span className="text-white font-display text-2xl font-black">
-                {Math.floor(stats.totalPlaytime / 60)}m {stats.totalPlaytime % 60}s
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-2xl mx-auto mb-16">
+            <div className="bg-white/5 border border-white/5 p-8 rounded-[2rem] group hover:bg-white/10 transition-all">
+              <span className="text-white/30 text-[10px] uppercase tracking-[0.4em] font-bold mb-2 block">Total Playtime</span>
+              <span className="text-white font-display text-5xl font-light">
+                {Math.floor(stats.totalPlaytime / 60)}<span className="text-xl text-white/40 ml-1">m</span> {stats.totalPlaytime % 60}<span className="text-xl text-white/40 ml-1">s</span>
               </span>
             </div>
-            <div className="flex flex-col">
-              <span className="text-white/30 text-[10px] uppercase tracking-widest font-bold mb-1">Avg Score</span>
-              <span className="text-white font-display text-2xl font-black">
+            <div className="bg-white/5 border border-white/5 p-8 rounded-[2rem] group hover:bg-white/10 transition-all">
+              <span className="text-white/30 text-[10px] uppercase tracking-[0.4em] font-bold mb-2 block">Average Precision</span>
+              <span className="text-white font-display text-5xl font-light">
                 {stats.totalGames > 0 ? Math.floor(stats.totalScore / stats.totalGames) : 0}
               </span>
             </div>
-            <div className="flex flex-col">
-              <span className="text-white/30 text-[10px] uppercase tracking-widest font-bold mb-1">Max Combo</span>
-              <span className="text-white font-display text-2xl font-black text-danger">{stats.highestCombo}</span>
+            <div className="bg-white/5 border border-white/5 p-8 rounded-[2rem] group hover:bg-white/10 transition-all">
+              <span className="text-white/30 text-[10px] uppercase tracking-[0.4em] font-bold mb-2 block">Peak Combo</span>
+              <span className="text-white font-display text-5xl font-light text-danger">{stats.highestCombo}</span>
             </div>
-            <div className="flex flex-col">
-              <span className="text-white/30 text-[10px] uppercase tracking-widest font-bold mb-1">Accuracy</span>
-              <span className="text-white font-display text-2xl font-black text-success">
-                {stats.totalAttempts > 0 ? Math.floor((stats.successfulAttempts / stats.totalAttempts) * 100) : 0}%
+            <div className="bg-white/5 border border-white/5 p-8 rounded-[2rem] group hover:bg-white/10 transition-all">
+              <span className="text-white/30 text-[10px] uppercase tracking-[0.4em] font-bold mb-2 block">Accuracy Rating</span>
+              <span className="text-white font-display text-5xl font-light text-success">
+                {stats.totalAttempts > 0 ? Math.floor((stats.successfulAttempts / stats.totalAttempts) * 100) : 0}<span className="text-xl text-white/40 ml-1">%</span>
               </span>
             </div>
           </div>
@@ -1085,9 +1168,10 @@ const App: React.FC = () => {
               setState(prev => ({ ...prev, status: GameStatus.INTRO }));
             }}
             onMouseEnter={handleHover}
-            className="bg-white text-bg px-14 py-5 rounded-full font-black text-xs tracking-widest w-full max-w-xs active:scale-95 transition-transform"
+            className="group relative bg-white text-bg px-16 py-6 rounded-full font-black text-xs tracking-[0.4em] w-full max-w-xs mx-auto active:scale-95 transition-all overflow-hidden"
           >
-            BACK TO MENU
+            <div className="absolute inset-0 bg-accent/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+            <span className="relative z-10">RETURN TO MENU</span>
           </button>
         </div>
       )}
@@ -1116,30 +1200,39 @@ const App: React.FC = () => {
       )}
 
       {state.status === GameStatus.GAMEOVER && (
-        <div className="absolute inset-0 z-50 bg-bg flex flex-col items-center justify-center p-10 pointer-events-auto animate-heavy-shake">
-          <div className="relative">
-            <h2 className="font-display text-7xl font-black text-danger mb-4 tracking-tighter animate-glitch">LOST.</h2>
-            <h2 className="absolute inset-0 font-display text-7xl font-black text-accent mb-4 tracking-tighter opacity-30 animate-glitch" style={{ animationDelay: '0.1s' }}>LOST.</h2>
+        <div className="absolute inset-0 z-50 bg-bg flex flex-col items-center justify-center p-12 pointer-events-auto animate-heavy-shake">
+          <div className="relative mb-8">
+            <h2 className="font-display text-9xl font-light text-danger tracking-tighter animate-glitch">LOST.</h2>
+            <h2 className="absolute inset-0 font-display text-9xl font-light text-accent tracking-tighter opacity-20 animate-glitch" style={{ animationDelay: '0.1s' }}>LOST.</h2>
           </div>
-          <div className="text-white/30 mb-12 tracking-[0.4em] uppercase font-bold text-xs">Total Score: {state.score}</div>
           
-          <button 
-            onClick={() => startGame(state.difficulty)}
-            onMouseEnter={handleHover}
-            className="bg-white text-bg px-16 py-5 rounded-full font-black text-xs tracking-[0.2em] mb-4 w-full max-w-xs hover:scale-105 active:scale-95 transition-transform shadow-[0_20px_50px_rgba(255,45,85,0.2)]"
-          >
-            TRY AGAIN
-          </button>
-          <button 
-            onClick={() => {
-              audioEngine.playClick();
-              setState(prev => ({ ...prev, status: GameStatus.INTRO }));
-            }}
-            onMouseEnter={handleHover}
-            className="border-2 border-white/5 text-white/40 px-16 py-5 rounded-full font-black text-xs tracking-[0.2em] w-full max-w-xs hover:bg-white/5 transition-colors"
-          >
-            MAIN MENU
-          </button>
+          <div className="bg-white/5 border border-white/5 p-10 rounded-[3rem] text-center mb-12 w-full max-w-sm relative overflow-hidden group">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-danger to-transparent" />
+            <p className="text-white/30 text-[10px] font-bold uppercase tracking-[0.5em] mb-4">Final Score</p>
+            <h3 className="font-display text-7xl font-light text-white tracking-tighter mb-2">{state.score}</h3>
+            <p className="font-display italic text-white/40 text-lg">Precision failed at the peak.</p>
+          </div>
+          
+          <div className="flex flex-col gap-4 w-full max-w-xs">
+            <button 
+              onClick={() => startGame(state.difficulty)}
+              onMouseEnter={handleHover}
+              className="group relative bg-white text-bg px-16 py-6 rounded-full font-black text-xs tracking-[0.4em] hover:scale-[1.02] active:scale-95 transition-all shadow-[0_20px_60px_rgba(255,45,85,0.15)] overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-danger/10 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+              <span className="relative z-10">TRY AGAIN</span>
+            </button>
+            <button 
+              onClick={() => {
+                audioEngine.playClick();
+                setState(prev => ({ ...prev, status: GameStatus.INTRO }));
+              }}
+              onMouseEnter={handleHover}
+              className="px-16 py-6 rounded-full border border-white/10 text-white/40 font-black text-xs tracking-[0.4em] hover:bg-white/5 hover:text-white transition-all"
+            >
+              MAIN MENU
+            </button>
+          </div>
         </div>
       )}
 
